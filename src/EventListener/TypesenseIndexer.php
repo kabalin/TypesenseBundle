@@ -140,26 +140,50 @@ class TypesenseIndexer
 
     private function entityIsNotManaged($entity)
     {
-        $entityClassname = $entity instanceof Proxy ? $entity::class : get_class($entity);
-
-        return !in_array($entityClassname, array_values($this->managedClassNames), true);
+        return $this->resolveManagedClassName($entity) === null;
     }
 
     private function getCollectionName($entity)
     {
-        $entityClassname = $entity instanceof Proxy ? $entity::class : get_class($entity);
+        $managedClassName = $this->resolveManagedClassName($entity);
 
-        return array_search($entityClassname, $this->managedClassNames, true);
+        if ($managedClassName === null) {
+            return false;
+        }
+
+        return array_search($managedClassName, $this->managedClassNames, true);
     }
 
     private function getCollectionKey($entity)
     {
-        $entityClassname = $entity instanceof Proxy ? $entity::class : get_class($entity);
+        $managedClassName = $this->resolveManagedClassName($entity);
+
+        if ($managedClassName === null) {
+            return null;
+        }
 
         foreach ($this->collectionManager->getCollectionDefinitions() as $key => $def) {
-            if ($def['entity'] === $entityClassname) {
+            if ($def['entity'] === $managedClassName) {
                 return $key;
             }
         }
+
+        return null;
+    }
+
+    // See : https://github.com/acseo/TypesenseBundle/pull/91
+    // Allow Doctrine inheritance subclasses to be recognized as their managed parent entity, the
+    // same way DoctrineToTypesenseTransformer::convert() already does.
+    private function resolveManagedClassName($entity): ?string
+    {
+        $entityClassname = $entity instanceof Proxy ? $entity::class : get_class($entity);
+
+        foreach (array_values($this->managedClassNames) as $managedClassName) {
+            if (is_a($entityClassname, $managedClassName, true)) {
+                return $managedClassName;
+            }
+        }
+
+        return null;
     }
 }
