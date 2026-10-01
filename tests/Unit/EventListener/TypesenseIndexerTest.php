@@ -10,6 +10,7 @@ use ACSEO\TypesenseBundle\EventListener\TypesenseIndexer;
 use ACSEO\TypesenseBundle\Manager\CollectionManager;
 use ACSEO\TypesenseBundle\Tests\Functional\Entity\Book;
 use ACSEO\TypesenseBundle\Tests\Functional\Entity\Author;
+use ACSEO\TypesenseBundle\Tests\Functional\Entity\PaperbackBook;
 use ACSEO\TypesenseBundle\Transformer\DoctrineToTypesenseTransformer;
 use Doctrine\Persistence\Event\LifecycleEventArgs;
 use Doctrine\Persistence\ObjectManager;
@@ -80,6 +81,32 @@ class TypesenseIndexerTest extends TestCase
             [ '' ],
             [ 'foo_' ],
         ];
+    }
+
+    public function testPostUpdateMatchesInheritanceSubclassOfConfiguredEntity()
+    {
+        // The collection is configured with the Book parent FQCN; PaperbackBook never persists
+        // directly, the same way an abstract Doctrine inheritance root never does.
+        $collectionDefinitions = $this->getCollectionDefinitions(Book::class);
+
+        $this->initialize($collectionDefinitions);
+
+        $book = new PaperbackBook(1, 'The Doors of Perception', new Author('Aldoux Huxley', 'United Kingdom'), new \DateTime('01/01/1984 00:00:00'));
+
+        $eventArgs = new LifecycleEventArgs($book, $this->objectManager->reveal());
+
+        $this->eventListener->postUpdate($eventArgs);
+        $this->eventListener->postFlush();
+
+        $this->documentManager->index('books', [
+            'id' => 1,
+            'sortable_id' => 1,
+            'title' => 'The Doors of Perception',
+            'author' => 'Aldoux Huxley',
+            'author_country' => 'United Kingdom',
+            'published_at' => 441763200,
+            'active' => false
+        ])->shouldHaveBeenCalled();
     }
 
     private function getCollectionDefinitions($entityClass, $prefix = '')
